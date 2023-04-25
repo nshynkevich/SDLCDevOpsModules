@@ -1,0 +1,23 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: denyrestrictednamespaceaccess
+spec:
+  crd:
+    spec:
+      names:
+        kind: DenyRestrictedNamespaceAccess
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package DenyNamespace
+
+        contains_elem(a, elem) { a[_] = elem }
+        
+        violation[{"msg": msg}] {
+          approved_users := ["kubernetes-admin", "shark"]
+
+          not startswith(input.review.userInfo.username, "system:")
+          not contains_elem(approved_users, input.review.userInfo.username)
+          msg := sprintf("User %v is not permitted to use namespace: %v", [input.review.userInfo.username, input.review.object.metadata.namespace])
+        }

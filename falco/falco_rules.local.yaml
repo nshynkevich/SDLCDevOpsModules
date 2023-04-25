@@ -1,0 +1,73 @@
+
+# I allow only 'sh' to use
+- list: shell_binaries_disallowed
+  items: [bash, csh, ksh, tcsh, zsh, dash]
+
+- list: disallowed_binaries
+  items: [apt, apt-get]
+
+# dpkg -L passwd | grep bin | xargs ls -ld | grep -v '^d' | awk '{print $9}' | xargs -L 1 basename | tr "\\n" ","
+- list: passwd_binaries
+  items: [shadowconfig,chage,chfn,chsh,expiry,gpasswd,passwd,chgpasswd,chpasswd,cpgr,cppw,groupadd,groupdel,groupmems,groupmod,grpck,grpconv,grpunconv,newusers,pwck,pwconv,pwunconv,useradd,userdel,usermod,vigr,vipw]
+
+- list: bad_domains
+  items: ["ca.minexmr.com","mine.xmrpool.net"]
+
+- macro: etc_dir
+  condition: (fd.name startswith /etc/)
+  
+# Restricted files
+- macro: write_etc_common
+  condition: >
+    etc_dir and evt.dir = < and open_write
+    and not proc.name in (passwd_binaries)
+    and not fd.name in (/etc/file_allow_write.txt)
+
+- macro: run_disallowed_binaries
+  condition: (proc.name in (disallowed_binaries))
+
+- rule: Write /etc/passwd
+  desc: An attempt to write directly to /etc/passwd
+  condition: >
+    etc_dir and evt.dir = < and open_write
+    and not fd.name = passwd
+  output: "/etc/passwd opened for writing (user=%user.name user_loginuid=%user.loginuid command=%proc.cmdline pid=%proc.pid parent=%proc.pname file=%fd.name program=%proc.name container_id=%container.id image=%container.image.repository)"
+  priority: ERROR
+  tags: [host, filesystem, etc_passwd]
+
+- rule: Detect disallowed shell in a container
+  desc: You shouldn’t have a shell run in a container
+  condition: container.id != host and (proc.name in (shell_binaries_disallowed) and evt.dir=<)
+  output: "%proc.name ran inside a container (user=%user.name command=%proc.cmdline %container.info)"
+  priority: INFO
+
+- rule: Inbound SSH Connection
+  desc: Detect Inbound SSH Connection
+  condition: >
+    ((evt.type in (accept,listen) and evt.dir=<) or
+      (evt.type in (recvfrom,recvmsg))) and ssh_port
+  output: "Inbound SSH connection (user=%user.name client_ip=%fd.cip client_port=%fd.cport server_ip=%fd.sip)"
+  priority: WARNING
+  tags: [network, ssh]
+
+- rule: Outbound SSH Connection
+  desc: Detect Outbound SSH Connection
+  condition: >
+    ((evt.type = connect and evt.dir=<) or
+      (evt.type in (sendto,sendmsg))) and ssh_port
+  output: "Outbound SSH connection (user=%user.name server_ip=%fd.sip server_port=%fd.sport client_ip=%fd.cip)"
+  priority: WARNING
+  tags: [network, ssh]
+
+- rule: Binary executed
+  desc: Detect disallowed binaries execution
+  condition: (evt.dir=< and proc.name in (disallowed_binaries))
+  output: "Disallowed to execute %proc.name"
+  priority: WARNING
+
+- rule: IP Addr or domain connection
+  desc: Detects connection to IP Addr or domain
+  condition: (((evt.type in (accept,listen,connect) and evt.dir=<)) and ((fd.ip = "9.9.9.9") or (fd.sip.name in (bad_domains)))) 
+  output: "Connection to IPAddr prohibited (binary=%proc.name user=%user.name server_ip=%fd.sip)"
+  priority: INFO
+  tags: [network]

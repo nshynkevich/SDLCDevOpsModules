@@ -1,0 +1,11 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: DenyRestrictedNamespaceAccess
+metadata:
+  name: denyrestrictednamespaceaccess
+spec:
+  match:
+    namespaces:
+      - kube-system
+      - default
+  parameters:
+  - operations: ["*"]

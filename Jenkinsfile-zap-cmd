@@ -1,0 +1,43 @@
+#!/bin/bash
+
+#ZAP_HOME=/opt/zaproxy
+#ZAP_JAR="zap-2.11.1.jar"
+#TARGET_URL="http://example.com/"
+#TARGET_REPORT="/tmp/test-report.html"
+
+ list_include_item() {
+  local list="$1"
+  local item="$2"
+  if [[ $list =~ (^|[[:space:]])"$item"($|[[:space:]]) ]] ; then
+    # yes, list include item
+    result=0
+  else
+    result=1
+  fi
+  return $result
+}
+
+failure_code() {
+    local url=${1:-http://localhost:8080}
+    local code=${2:-500}
+    status=$(curl --head --location -m 5 --write-out %{http_code} --silent --output /dev/null ${url})
+    #[[ $status == ${code} ]] || [[ $status == 000 ]]
+    echo $status
+}
+
+if ! `list_include_item "200 201 202 203" $(failure_code "${TARGET_URL}")`; then 
+  echo "  [x] Connection refused ${TARGET_URL}"
+    exit 1
+fi
+
+echo "  [.] Start OWASP ZAP scan ${TARGET_URL} .. "
+
+java -jar ${ZAP_HOME}/${ZAP_JAR} -cmd -quickurl ${TARGET_URL} -quickprogress -quickout ${TARGET_REPORT}
+if [ $? -eq 0 ]; then
+  echo "  [+] OK"
+  [ -e ${TARGET_REPORT} ] && echo "  [+] Report (${TARGET_URL}): ${TARGET_REPORT} ready."
+else
+  echo "  [x] FAILURE"
+  echo "  [-] Unable to scan ${TARGET_URL}"
+fi
+

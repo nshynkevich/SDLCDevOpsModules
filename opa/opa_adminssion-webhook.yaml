@@ -1,0 +1,31 @@
+# won't listen to actions coming from any 
+# namespace that has the openpolicyagent.org/webhook=ignore label.
+kind: ValidatingWebhookConfiguration
+apiVersion: admissionregistration.k8s.io/v1
+metadata:
+  name: opa-validating-webhook
+webhooks:
+  - name: validating-webhook.openpolicyagent.org
+    admissionReviewVersions:
+    - v1beta1
+    namespaceSelector:
+      matchExpressions:
+      - key: openpolicyagent.org/webhook
+        operator: NotIn
+        values:
+        - ignore
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["*"]
+        apiVersions: ["*"]
+        resources: ["*"]
+    sideEffects: None
+    clientConfig:
+      service:
+        namespace: opa
+        name: opa
+#    clientConfig:
+#      caBundle: $(cat opa_ca.crt | base64 | tr -d '\n')
+#      service:
+#        namespace: opa
+#        name: opa

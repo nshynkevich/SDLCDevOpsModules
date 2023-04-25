@@ -1,0 +1,42 @@
+- hosts: localhost
+  connection: local 
+  tasks:
+    - name: "Playing with Ansible"
+      shell: "echo $PATH; pwd"
+      register: "output"
+    - debug: var=output.stdout_lines
+
+    - name: "Include Host Configuration (section1)"
+      import_tasks: section_1.yml
+      when: section_1 | bool
+      register: "output"
+    - debug: var=output.stdout_lines
+      when: debug_mode | bool
+
+    - name: "Include Docker daemon configuration (section 2)"
+      import_tasks: section_2.yml
+      register: "output"
+    - debug: var=output.stdout_lines
+      when: debug_mode | bool
+  
+    - name: "Include Docker daemon configuration files (section 3)"
+      import_tasks: section_3.yml
+      register: "output"
+    - debug: var=output.stdout_lines
+      when: debug_mode | bool
+
+    - name: "Include Container Images and Build File (section 4)"
+      import_tasks: section_4.yml
+      register: "output"
+    - debug: var=output.stdout_lines
+      when: debug_mode | bool
+
+    - name: "Include Container Runtime (section 5)"
+      import_tasks: section_5.yml
+      register: "output"
+    - debug: var=output.stdout_lines
+      when: debug_mode | bool
+
+
+  handlers:
+    - import_tasks: ../handlers/main.yml

@@ -1,0 +1,10 @@
+export ANSIBLE_LIBRARY=/home/debian/ansible-cis-docker-ce-hardening/library
+
+E: Release file for http://security.ubuntu.com/ubuntu/dists/focal-security/InRelease is not valid yet (invalid for another 18h 32min 20s). Updates for this repository will not be applied.
+date
+sudo hwclock --hctosys
+sudo apt install ntp
+sudo dpkg-reconfigure tzdata
+sudo service ntp restart
+sudo apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update
+

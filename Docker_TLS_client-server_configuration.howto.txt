@@ -1,0 +1,151 @@
+Docker TLS client-server configuration (+CA server required)
+* Configure a CA and certificates
+	Create a new private key -- ca-key.pem -- for the CA.
+	
+	$ openssl genrsa -aes256 -out ca-key.pem 4096
+	
+	Use the CA’s private key to generate a public key -- ca.pem -- (certificate).
+	
+	$ openssl req -new -x509 -days 730 -key ca-key.pem -sha256 -out ca.pem
+	
+	These are the CA’s key-pair and form the identity of the CA. At this point, the CA is ready to use.
+
+* Create a CA
+	e.g. on node2
+
+* Create and sign keys for the Daemon (node3)
+	from node2 (CA) Create the private key -- daemon-key.pem -- for the daemon.
+ 	
+ 	$ openssl genrsa -out daemon-key.pem 4096 <Snip>
+	
+	Create a certificate signing request (CSR) for the CA to create and sign a certificate for the daemon. Be sure to use the correct DNS name for your daemon node. The example uses node3.
+ 	
+ 	$ openssl req -subj "/CN=node3" -sha256 -new -key daemon-key.pem -out daemon.csr
+ 	
+ 	Add required attributes to the certificate.
+	This step creates a file that tells the CA to add a couple of extended attributes to the daemon’s certificate when it signs it. These add the daemon’s DNS name and IP address, as well as configure the certificate to be valid for server authentication.
+	Create a new file called extfile.cnf with the following values. The example uses the DNS name and IP of the daemon node in the lab from Figure 5.6. The values in your environment might be different.
+
+ subjectAltName = DNS:node3,IP:10.0.0.12
+ extendedKeyUsage = serverAuth
+
+ 	Generate the certificate.
+	This step uses the CSR file, CA keys, and the extfile.cnf file to sign and configure the daemon’s certificate. It will output the daemon’s public key (certificate) as a new file called daemon-cert.pem
+ 	
+ 	$ openssl x509 -req -days 730 -sha256 -in daemon.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out daemon-cert.pem -extfile extfile.cnf
+
+ 	At this point, you have a working CA, as well as a key-pair for node3 that can be used to secure the Docker daemon. Delete the CSR and extfile.cnf before moving on.
+
+	$ rm daemon.csr extfile.cnf
+
+* Create and sign keys for the Client (node1)
+
+	Run all commands from the CA (node2). Create a private key for node1.
+	This will generate a new file in your working directory called client-key.pem.
+ 	
+ 	$ openssl genrsa -out client-key.pem 4096
+
+	Create a CSR. Be sure to use the correct DNS name of the node that will be your secure Docker client. The example uses node1.
+ 	
+ 	$ openssl req -subj '/CN=node1' -new -key client-key.pem -out client.csr
+
+	This will create a new file in your current directory called client.csr.
+
+	Create a file called extfile.cnf and populate it with the following value. This will make the certificate valid for client authentication.
+ 
+ extendedKeyUsage = clientAuth
+
+	Create the certificate for node1 using the CSR, the CA’s public and private keys, and the extfile.cnf file. This will create the client’s signed public key as a new file in your current directory called client-cert.pem.
+ 	
+ 	$ openssl x509 -req -days 730 -sha256 -in client.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out client-cert.pem -extfile extfile.cnf
+	
+	Delete the CSR and extfile.cnf files, as these are no longer needed.
+
+	$ rm client.csr extfile.cnf
+
+	-----
+
+	At this point you should have the following 7 files in your working directory:
+
+ca-key.pem          << CA private key
+ca.pem              << CA public key (cert)
+ca.srl              << Tracks serial numbers
+client-cert.pem     << client public key (Cert)
+client-key.pem      << client private key
+daemon-cert.pem     << daemon public key (cert)
+daemon-key.pem      << daemon private key
+
+	$ chmod 0400 ca-key.pem client-key.pem daemon-key.pem
+	
+	You should also remove write access to the public key certificates.
+
+	$ chmod -v 0444 ca.pem client-cert.pem daemon-cert.pem
+
+* Distribute keys
+
+ca.pem, daemon-cert.pem, and daemon-key.pem from the CA to the node3 (the daemon node).
+ca.pem, client-cert.pem, and client-key.pem from the CA to node1 (the client node).
+
+* Configure Docker to use TLS
+
+	Securing the daemon is as simple as setting a few daemon flags in the daemon.json (This is found in /etc/docker/ on Linux, and C:\ProgramData\Docker\config\ on Windows.) configuration file:
+
+	tlsverify enables TLS verification
+	tlscacert tells the daemon which CA to trust
+	tlscert tells Docker where the daemon’s certificate is located
+	tlskey tells Docker where the daemon’s private key is located
+	hosts tells Docker which sockets to bind the daemon on
+
+* Configure daemon mode
+
+{
+    "hosts": ["tcp://node3:2376"],
+    "tls": true,
+    "tlsverify": true,
+    "tlscacert": "/home/ubuntu/.docker/ca.pem",
+    "tlscert": "/home/ubuntu/.docker/cert.pem",
+    "tlskey": "/home/ubuntu/.docker/key.pem"
+}
+Warning! Linux systems running systemd don’t allow you to use the “hosts” option in daemon.json. Instead, you have to specify it in a systemd override file. You may be able to do this with the sudo systemctl edit docker command. This will open a new file called /etc/systemd/system/docker.service.d/override.conf in an editor. Add the following three lines and save the file.
+
+[Service]
+ExecStart=
+ExecStart=/usr/bin/dockerd -H tcp://node3:2376
+
+	and restart Docker 
+
+	$ ps -elf | grep dockerd
+	4 S root  ... /usr/bin/dockerd -H tcp://node3:2376
+
+	$ docker -H tcp://node3:2376 version
+
+	(If not working: This is because the daemon is rejecting all connections from unauthenticated clients.)
+
+* Configure client mode
+
+	$ export DOCKER_HOST=tcp://node3:2376
+	$ export DOCKER_TLS_VERIFY=1
+	$ $ docker version
+Client:
+ Version:       19.03.8
+<Snip>
+Server:
+ Engine:
+  Version:      19.03.8
+  API version:  1.40 (minimum version 1.12)
+  Go version:   go1.12
+  ...
+  ...
+
+
+
+----
+----
+A couple of final points before we do a quick recap.
+
+This last example works because you copied the clients TLS keys to the folder that Docker expects them to be in. This is a hidden folder in your user’s home directory called .docker. You also gave the keys the default filenames that Docker expects (ca.pem, cert.pem, and key.pem). You can specify a different folder by exporting DOCKER_CERT_PATH.
+You will probably want to make the environment variables (DOCKER_HOST and DOCKER_TLS_VERIFY) more permanent fixtures of your environment.
+----
+----
+
+

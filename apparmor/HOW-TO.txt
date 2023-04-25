@@ -1,0 +1,161 @@
+###### apparmor for apache
+# Enable systemctl apparmor.service if disabled
+
+# Add to kernel parameters via /etc/default/grub
+GRUB_CMDLINE_LINUX_DEFAULT=" apparmor=1 security=apparmor"
+grub-mkconfig -o /boot/grub/grub.cfg
+shutdown -r now
+systemctl start apparmor.service
+systemctl enable apparmor.service
+
+# Ensure installed
+apt policy apparmor
+
+# need apache2 profile libapache2-mod-apparmor.
+apt install libapache2-mod-apparmor apparmor-utils
+
+# Enable it
+aa-enforce /etc/apparmor.d/usr.sbin.apache2
+
+# Configure apache2
+a2enmod mpm_prefork
+a2enmod apparmor
+service apache2 restart
+
+# Add test deny rule to usr.sbin.apache2 profile
+deny /webapps/apps/app1/uploads/ rw 
+
+##############
+APP=apache2;APP_PROFILE=`which $APP | tr '/' '.' | cut -c2-`; sudo aa-easyprof `which $APP` > $APP_PROFILE;sudo mv $APP_PROFILE /etc/apparmor.d;sudo apparmor_parser -r /etc/apparmor.d/$APP_PROFILE; sudo aa-complain $APP && $APP; sudo aa-logprof; sudo apparmor_parser -r /etc/apparmor.d/$APP_PROFILE;
+##############
+# Create hat
+# To apache2 sites-available/simple.conf
+
+     <IfModule mod_apparmor.c>
+         AADefaultHatName simple.com
+     </IfModule>
+
+# To /etc/apparmor.d/apache2.d/usr.sbin.apache2.hat
+
+^simple.com {
+	#include <abstractions/apache2-common>
+	/webapps/apps/             			r,
+    /webapps/apps/app1/**      			r,
+    /var/log/apache2/*.log     			w,
+	/webapps/apps/app1/uploads/			r,
+}
+
+##############
+# Or all in one apache2 profile
+# 
+
+ ^simple.com {
+    #include <abstractions/apache2-common>
+    #include <abstractions/evince>
+    #include <abstractions/php>
+    #include <abstractions/user-tmp>
+
+    signal receive set=kill peer=/usr/sbin/apache2,
+    signal receive set=term peer=/usr/sbin/apache2,
+
+    /proc/*/attr/current rw,
+    /var/log/apache2/access.log w,
+    /var/log/apache2/error.log w,
+    
+    /webapps/apps/app1/uploads/ rw,
+    
+    owner /**.[jJ][pP][gG] rw,
+
+    owner /webapps/apps/app1/config.php r,
+    owner /webapps/apps/app1/index.php r,
+    owner /webapps/apps/app1/uploads/ r,
+
+
+~~~~
+
+aa-genprof
+
+
+generate profile for app
+	$ aa-easyprof `which apache2` > usr.sbin.apache2
+	$ mv usr.sbin.apache2 /etc/apparmor.d
+load app into complain mdoe
+	$ sudo aa-complain apache2
+run app from terminal
+after that profile need to be tuned with 
+	$ sudo aa-logprof
+(use 'sudo aa-teardown apache2' if app gets stucked)
+then reload profile with purging cache
+	$ sudo apparmor_parser -r --purge-cache /etc/apparmor.d/usr.sbin.apache2
+and restart apache2 service
+	$ sudo systemctl restart apache2.service
+
+~~~~
+
+
+
+# Reload profile
+# sudo apparmor_parser -r --purge-cache /etc/apparmor.d/usr.sbin.apache2
+sudo apparmor_parser -r --purge-cache /etc/apparmor.d/$APP_PROFILE;
+
+
+APP=apache2;APP_PROFILE=`which $APP | tr '/' '.' | cut -c2-`; sudo aa-easyprof `which $APP` > $APP_PROFILE;sudo mv $APP_PROFILE "/etc/apparmor.d/apache2.d/$APP_PROFILE.hat"
+
+
+
+
+
+
+###### Create custom apparmor profile
+# try with certspotter
+sudo apt install apparmor-easyprof apparmor-notify apparmor-utils certspotter
+# Generating a basic profile
+APP=certspotter;APP_PROFILE=`which $APP | tr '/' '.' | cut -c2-`
+aa-easyprof `which $APP` > $APP_PROFILE
+mv $APP_PROFILE /etc/apparmor.d
+
+# Load the profile into the kernel:
+apparmor_parser -r /etc/apparmor.d/$APP_PROFILE
+
+# Trying to run certspotter, results in an immediate (safe) crash.
+$APP
+# certspotter: /home/testuser/.certspotter/watchlist: open /home/testuser/.certspotter/watchlist permission denied
+# This basic profile doesn’t allow certspotter access to resources it 
+# needs, so let’s look at the AppArmor denial messages to see what went wrong.
+# AppArmor denials are logged to /var/log/syslog or /var/log/audit/audit.log or
+# by using the aa-notify (parse syslog or audit.log) tool.
+# !! Develop this profile with aa-logprof tool (set profile in complian mode
+# to see what happening)
+aa-complain $APP && $APP
+# Using aa-logprof to Refine the Profile (tool will parse the AppArmor 
+# messages and suggest policy rules which would permit certspotter to run under confinement.)
+sudo aa-logprof
+# Refine by adding some rules too via opening as text file
+
+# Reload the policy once again:
+apparmor_parser -r /etc/apparmor.d/$APP
+
+
+# AppArmor deny rules
+# AppArmor profiles are default-deny by default, adding 
+# explicit deny rules can guard against profile mistakes:
+
+deny @{HOME}/Documents/ rw,
+deny @{HOME}/Private/ rw,
+deny @{HOME}/Pictures/ rw,
+deny @{HOME}/Videos/ rw,
+deny @{HOME}/fake/ rw,
+deny @{HOME}/.config/ rw,
+deny @{HOME}/.ssh/ rw,
+deny @{HOME}/.bashrc rw,
+
+
+
+
+
+
+
+
+
+
+

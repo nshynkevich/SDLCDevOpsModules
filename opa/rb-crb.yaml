@@ -1,0 +1,102 @@
+
+# group 		    user 			     ns 	res
+# ops 			    shark			     all	all
+# dev 			    pewpew,shark	 app	deploy, svc, ...
+# observers		  alice			     app	readonly
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app
+spec: {}
+status: {}
+---
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: role-app-read
+  namespace: app
+rules:
+- apiGroups: ["", "extensions", "apps"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: role-app-full
+  namespace: app
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-role-full
+rules:
+  - apiGroups: [""]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: app-observers
+  namespace: app
+subjects:
+- kind: Group
+  name: observers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: role-app-read
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: app-dev
+  namespace: app
+subjects:
+- kind: Group
+  name: dev
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: role-app-full
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: shark-full
+subjects:
+- kind: User
+  name: shark
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-role-full
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ops-full
+subjects:
+- kind: Group
+  name: ops
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-role-full

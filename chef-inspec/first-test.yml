@@ -1,0 +1,17 @@
+name: first-test
+title: First test profile
+maintainer: Chef Software, Inc.
+copyright: Chef Software, Inc.
+copyright_email: support@chef.io
+license: Proprietary, All rights reserved
+summary: Verify that SSH Server and SSH Client are configured securely
+version: 1.0.0
+supports:
+  - platform-family: linux
+depends:
+  - name: profile
+    path: ../path/to/profile
+gem_dependencies:
+  - name: "gem-name"
+    version: ">= 2.0.0"
+inspec_version: "~> 2.1"
